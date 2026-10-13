@@ -346,14 +346,11 @@ def hitung_k_invers_dengan_proses(K, det_mod):
     print(f"1. Determinan Kunci (mod 26): {det_mod}")
     
     # 2. Mencari nilai invers determinan (det⁻¹)
+    # Menggunakan fungsi invers_modulo() untuk mencari x sehingga (det_mod * x) mod 26 == 1
     print("\n2. Mencari Nilai x untuk det⁻¹ (sehingga det · x ≡ 1 mod 26):")
-    det_inv = None
-    for x in range(1, 26):
-        if (det_mod * x) % 26 == 1:
-            det_inv = x
-            print(f"   • Uji x = {x}: ({det_mod} · {x}) = {det_mod * x} ≡ 1 (mod 26) [BERHASIL]")
-            break
-            
+    det_inv = invers_modulo(det_mod)  # Bug #5 Fix: gunakan fungsi invers_modulo() yang sudah ada
+    if det_inv is not None:
+        print(f"   • Uji x = {det_inv}: ({det_mod} · {det_inv}) = {det_mod * det_inv} ≡ {(det_mod * det_inv) % 26} (mod 26) [BERHASIL]")
     print(f"   -> Maka det⁻¹ = {det_inv}")
     
     # 3. Menghitung Matriks Kofaktor & Adjoin
@@ -419,6 +416,7 @@ def alur_input_kunci_awal():
     Alur Kerja:
     1. Menampilkan panduan dan tips syarat kunci yang valid untuk Hill Cipher:
        - Harus berukuran persegi (misal 4 angka untuk 2x2, 9 angka untuk 3x3).
+       - Maksimum ukuran matriks adalah 6×6 (karena kompleksitas O(n!)).
        - Determinan tidak boleh 0, tidak genap, dan bukan kelipatan 13.
        - FPB/gcd(determinan, 26) harus sama dengan 1.
        - Bukan matriks identitas (trivial key).
@@ -426,26 +424,29 @@ def alur_input_kunci_awal():
        a. Membaca teks masukan dan mengonversinya menjadi list angka integer.
        b. Menghitung ukuran matriks n menggunakan math.isqrt() (akar kuadrat integer).
        c. Memastikan jumlah angka pas membentuk matriks bujur sangkar (n * n == jumlah_elemen).
-       d. Mengubah list 1 dimensi menjadi list 2 dimensi (matriks n x n).
-       e. Menghitung determinan kunci melalui fungsi hitung_determinan_dengan_proses().
-       f. Validasi kelayakan determinan (mod 26):
+       d. [Bug #3 Fix] Memastikan ukuran matriks tidak melebihi MAX_UKURAN (6×6).
+       e. Mengubah list 1 dimensi menjadi list 2 dimensi (matriks n x n).
+       f. [Bug #2 Fix] Validasi kunci trivial (SEBELUM komputasi mahal):
+          - Jika kunci adalah matriks identitas (mod 26), tampilkan peringatan detail dan saran.
+       g. Menghitung determinan kunci melalui fungsi hitung_determinan_dengan_proses().
+       h. Validasi kelayakan determinan (mod 26):
           - Jika tidak valid, panggil fungsi berikan_saran_perbaikan() dan minta input ulang.
-          - Jika valid, lanjutkan ke validasi berikutnya.
-       g. Validasi kunci trivial menggunakan cek_kunci_trivial():
-          - Jika kunci adalah matriks identitas (mod 26), tampilkan peringatan detail dan saran,
-            lalu minta input ulang.
-       h. Jika semua validasi lolos, hitung K⁻¹ dan kembalikan pasangan (kunci, k_inv).
+       i. Jika semua validasi lolos, hitung K⁻¹ dan kembalikan pasangan (kunci, k_inv).
     """
+    # Batas maksimum ukuran matriks untuk mencegah program hang (Bug #1 & #3 Fix)
+    MAX_UKURAN = 6
+
     print("=" * 60)
     print("           INPUT KUNCI / KEY HILL CIPHER              ")
     print("=" * 60)
     print("📌 TIPS & TRICK MEMILIH KUNCI VALID:")
     print(" 1. Masukkan elemen angka dipisahkan spasi (misal 4 angka untuk 2x2, 9 angka untuk 3x3).")
-    print(" 2. Pastikan determinan TIDAK 0 (matriks tidak boleh singular).")
-    print(" 3. Pastikan determinan TIDAK GENAP dan BUKAN KELIPATAN 13.")
-    print(" 4. Contoh Kunci 2x2 Valid : 3 3 2 5  (det = 9)")
-    print(" 5. Contoh Kunci 3x3 Valid : 1 0 2 4 4 3 5 7 6  (det = 19)")
-    print(" 6. HINDARI Matriks Identitas (diagonal serba 1, lainnya 0) → ciphertext = plaintext!")
+    print(f" 2. Ukuran matriks maksimum yang didukung: {MAX_UKURAN}×{MAX_UKURAN} ({MAX_UKURAN**2} angka).")
+    print(" 3. Pastikan determinan TIDAK 0 (matriks tidak boleh singular).")
+    print(" 4. Pastikan determinan TIDAK GENAP dan BUKAN KELIPATAN 13.")
+    print(" 5. Contoh Kunci 2x2 Valid : 3 3 2 5  (det = 9)")
+    print(" 6. Contoh Kunci 3x3 Valid : 1 0 2 4 4 3 5 7 6  (det = 19)")
+    print(" 7. HINDARI Matriks Identitas (diagonal serba 1, lainnya 0) → ciphertext = plaintext!")
     print("=" * 60 + "\n")
     
     while True:
@@ -464,22 +465,35 @@ def alur_input_kunci_awal():
         if n * n != jumlah_elemen or n == 0:
             print(f"[Error] Jumlah angka ({jumlah_elemen}) tidak membentuk matriks bujur sangkar (contoh: 4 angka untuk 2x2, 9 angka untuk 3x3)!\n")
             continue
-            
-        # Mengubah list 1D menjadi matriks 2D berukuran n x n
-        kunci = [raw_kunci[i * n:(i + 1) * n] for i in range(n)]
-        
-        # Hitung determinan dengan rincian proses
-        det_raw, det_mod = hitung_determinan_dengan_proses(kunci)
-        
-        # Validasi 3: Determinan harus relatif prima dengan 26 (memiliki invers modulo 26)
-        if det_mod == 0 or det_mod % 2 == 0 or det_mod % 13 == 0 or math.gcd(det_mod, 26) != 1:
-            print(f"\n❌ [KUNCI DITOLAK] Determinan mod 26 = {det_mod} TIDAK VALID!")
-            berikan_saran_perbaikan(kunci, det_mod)
+
+        # Validasi 2b (Bug #1 & #3 Fix): Batas maksimum ukuran matriks
+        # Komputasi determinan menggunakan ekspansi kofaktor rekursif = O(n!) operasi.
+        # Matriks 7×7 = 5040 rekursi, 8×8 = 40.320, 10×10 = 3.628.800 → program HANG!
+        # Oleh karena itu ukuran matriks dibatasi maksimum MAX_UKURAN × MAX_UKURAN.
+        if n > MAX_UKURAN:
+            print(f"\n❌ [ERROR] Ukuran matriks {n}×{n} MELEBIHI batas maksimum yang didukung ({MAX_UKURAN}×{MAX_UKURAN})!")
+            print("=" * 60)
+            print("📌 PENJELASAN MASALAH:")
+            print(f"   Program menggunakan algoritma Ekspansi Kofaktor Rekursif untuk menghitung determinan.")
+            print(f"   Algoritma ini memiliki kompleksitas O(n!) — faktorial dari ukuran matriks.")
+            print(f"   Untuk matriks {n}×{n}, dibutuhkan ~{math.factorial(n):,} operasi rekursi.")
+            print(f"   Hal ini akan membuat program TIDAK MERESPONS selama waktu yang sangat lama.")
+            print("💡 SARAN:")
+            print(f"   Gunakan matriks dengan ukuran maksimum {MAX_UKURAN}×{MAX_UKURAN} ({MAX_UKURAN**2} angka).")
+            print("   Contoh kunci valid yang bisa digunakan:")
+            print("   • 2×2 (4 angka)  : 3 3 2 5")
+            print("   • 3×3 (9 angka)  : 1 0 2 4 4 3 5 7 6")
+            print("   • 4×4 (16 angka) : 1 2 1 0 0 1 2 1 1 0 1 2 2 1 0 1")
+            print("-" * 60)
             print("Silakan input ulang kunci yang baru.\n" + "-" * 50)
             continue
 
-        # Validasi 4: Cek apakah kunci bersifat trivial (matriks identitas mod 26)
-        # Kunci trivial menyebabkan K·P = P → Ciphertext = Plaintext (tidak ada enkripsi)
+        # Mengubah list 1D menjadi matriks 2D berukuran n x n
+        kunci = [raw_kunci[i * n:(i + 1) * n] for i in range(n)]
+
+        # Validasi 3 (Bug #2 Fix): Cek kunci trivial SEBELUM komputasi mahal
+        # Ini menghindari pemborosan 1892+ baris output untuk matriks identitas
+        # sebelum akhirnya ditolak. Cek ini sangat cepat: hanya O(n²).
         if cek_kunci_trivial(kunci):
             n_size = len(kunci)
             print(f"\n⚠️  [PERINGATAN KUNCI TRIVIAL] Kunci yang Anda masukkan adalah Matriks Identitas {n_size}x{n_size}!")
@@ -492,7 +506,7 @@ def alur_input_kunci_awal():
             print("     C = P              ← Hasilnya: Ciphertext = Plaintext!")
             print("   Artinya: Teks Anda TIDAK DIENKRIPSI sama sekali — teks asli langsung terlihat.")
             print("   Kunci ini TIDAK AMAN dan tidak boleh digunakan dalam kriptografi.")
-            print("="*60)
+            print("=" * 60)
             print("💡 SARAN PERBAIKAN:")
             print("   Pilih kunci yang elemennya tidak membentuk matriks identitas.")
             print("   Contoh kunci yang aman dan valid:")
@@ -501,6 +515,16 @@ def alur_input_kunci_awal():
             print("   • 4x4 : 1 2 1 0 0 1 2 1 1 0 1 2 2 1 0 1  (det mod 26 = 3)")
             print("   Pastikan tidak ada baris/kolom yang saling merupakan kelipatan satu sama lain.")
             print("-" * 60)
+            print("Silakan input ulang kunci yang baru.\n" + "-" * 50)
+            continue
+
+        # Hitung determinan dengan rincian proses (komputasi mahal — aman setelah cek di atas)
+        det_raw, det_mod = hitung_determinan_dengan_proses(kunci)
+        
+        # Validasi 4: Determinan harus relatif prima dengan 26 (memiliki invers modulo 26)
+        if det_mod == 0 or det_mod % 2 == 0 or det_mod % 13 == 0 or math.gcd(det_mod, 26) != 1:
+            print(f"\n❌ [KUNCI DITOLAK] Determinan mod 26 = {det_mod} TIDAK VALID!")
+            berikan_saran_perbaikan(kunci, det_mod)
             print("Silakan input ulang kunci yang baru.\n" + "-" * 50)
             continue
             
@@ -661,6 +685,15 @@ def proses_dekripsi(ciphertext, K_inv):
         block_idx += 1
         
     print(f"Plaintext hasil dekripsi: {plaintext}")
+
+    # Bug #4 Fix: Beri keterangan jika ada kemungkinan padding 'X' di akhir hasil dekripsi.
+    # Saat enkripsi, karakter 'X' ditambahkan jika panjang teks tidak kelipatan n.
+    # Saat dekripsi, 'X' tersebut muncul kembali dan bisa membingungkan pengguna.
+    if plaintext.endswith('X'):
+        print("ℹ️  [Catatan Padding] Karakter 'X' di akhir hasil dekripsi kemungkinan bukan")
+        print("   bagian dari pesan asli, melainkan karakter PADDING yang ditambahkan")
+        print("   secara otomatis saat proses enkripsi agar panjang teks kelipatan ukuran matriks.")
+        print(f"   Plaintext tanpa padding X : {plaintext.rstrip('X')}")
     print("------------------------\n")
 
 
