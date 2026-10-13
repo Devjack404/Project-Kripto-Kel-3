@@ -284,6 +284,38 @@ def berikan_saran_perbaikan(K, det_mod):
         print("  Saran: Ganti salah satu angka pada matriks dengan angka lain.")
 
 
+def cek_kunci_trivial(K):
+    """
+    Fungsi: Mendeteksi apakah matriks kunci K bersifat 'trivial', yaitu kunci yang secara
+    matematis valid (punya invers mod 26) NAMUN menghasilkan Ciphertext == Plaintext,
+    sehingga enkripsi tidak memberikan keamanan apapun.
+
+    Kasus Trivial yang Dideteksi:
+    - Matriks Identitas (I): Seluruh elemen diagonal bernilai 1 (mod 26) dan
+      semua elemen di luar diagonal bernilai 0 (mod 26).
+    - Mengapa berbahaya: Rumus enkripsi Hill Cipher adalah C = K·P mod 26.
+      Jika K ≡ I (mod 26), maka C = I·P = P, artinya Ciphertext = Plaintext.
+      Kunci tidak mengacak teks sama sekali!
+
+    Alur Kerja:
+    1. Dapatkan ukuran matriks n.
+    2. Periksa setiap elemen K[i][j] terhadap nilai yang diharapkan pada matriks identitas:
+       - Jika i == j (diagonal): nilai harus 1 (mod 26).
+       - Jika i != j (luar diagonal): nilai harus 0 (mod 26).
+    3. Jika semua elemen memenuhi kondisi di atas → kembalikan True (kunci trivial).
+    4. Jika ada satu saja elemen yang tidak memenuhi → kembalikan False (kunci aman).
+    """
+    n = len(K)
+    for i in range(n):
+        for j in range(n):
+            # Nilai yang diharapkan: 1 jika diagonal, 0 jika bukan diagonal
+            expected = 1 if i == j else 0
+            # Bandingkan nilai aktual (mod 26) dengan nilai matriks identitas
+            if K[i][j] % 26 != expected:
+                return False  # Setidaknya satu elemen berbeda → bukan identitas
+    return True  # Semua elemen cocok → matriks identitas (trivial)
+
+
 # --- PROSES MENCARI K⁻¹ DENGAN RINCIAN ADJOIN SEPENUHNYA ---
 def hitung_k_invers_dengan_proses(K, det_mod):
     """
@@ -389,6 +421,7 @@ def alur_input_kunci_awal():
        - Harus berukuran persegi (misal 4 angka untuk 2x2, 9 angka untuk 3x3).
        - Determinan tidak boleh 0, tidak genap, dan bukan kelipatan 13.
        - FPB/gcd(determinan, 26) harus sama dengan 1.
+       - Bukan matriks identitas (trivial key).
     2. Melakukan perulangan input (while True) hingga kunci yang valid dimasukkan:
        a. Membaca teks masukan dan mengonversinya menjadi list angka integer.
        b. Menghitung ukuran matriks n menggunakan math.isqrt() (akar kuadrat integer).
@@ -397,8 +430,11 @@ def alur_input_kunci_awal():
        e. Menghitung determinan kunci melalui fungsi hitung_determinan_dengan_proses().
        f. Validasi kelayakan determinan (mod 26):
           - Jika tidak valid, panggil fungsi berikan_saran_perbaikan() dan minta input ulang.
-          - Jika valid, lanjutkan ke perhitungan matriks invers K⁻¹.
-       g. Mengembalikan pasangan (kunci, k_inv).
+          - Jika valid, lanjutkan ke validasi berikutnya.
+       g. Validasi kunci trivial menggunakan cek_kunci_trivial():
+          - Jika kunci adalah matriks identitas (mod 26), tampilkan peringatan detail dan saran,
+            lalu minta input ulang.
+       h. Jika semua validasi lolos, hitung K⁻¹ dan kembalikan pasangan (kunci, k_inv).
     """
     print("=" * 60)
     print("           INPUT KUNCI / KEY HILL CIPHER              ")
@@ -409,6 +445,7 @@ def alur_input_kunci_awal():
     print(" 3. Pastikan determinan TIDAK GENAP dan BUKAN KELIPATAN 13.")
     print(" 4. Contoh Kunci 2x2 Valid : 3 3 2 5  (det = 9)")
     print(" 5. Contoh Kunci 3x3 Valid : 1 0 2 4 4 3 5 7 6  (det = 19)")
+    print(" 6. HINDARI Matriks Identitas (diagonal serba 1, lainnya 0) → ciphertext = plaintext!")
     print("=" * 60 + "\n")
     
     while True:
@@ -438,6 +475,32 @@ def alur_input_kunci_awal():
         if det_mod == 0 or det_mod % 2 == 0 or det_mod % 13 == 0 or math.gcd(det_mod, 26) != 1:
             print(f"\n❌ [KUNCI DITOLAK] Determinan mod 26 = {det_mod} TIDAK VALID!")
             berikan_saran_perbaikan(kunci, det_mod)
+            print("Silakan input ulang kunci yang baru.\n" + "-" * 50)
+            continue
+
+        # Validasi 4: Cek apakah kunci bersifat trivial (matriks identitas mod 26)
+        # Kunci trivial menyebabkan K·P = P → Ciphertext = Plaintext (tidak ada enkripsi)
+        if cek_kunci_trivial(kunci):
+            n_size = len(kunci)
+            print(f"\n⚠️  [PERINGATAN KUNCI TRIVIAL] Kunci yang Anda masukkan adalah Matriks Identitas {n_size}x{n_size}!")
+            print("=" * 60)
+            print("📌 PENJELASAN MASALAH:")
+            print(f"   Matriks Identitas {n_size}x{n_size} memang memiliki determinan = 1 (valid secara matematis),")
+            print("   TETAPI ketika digunakan sebagai kunci Hill Cipher, rumus enkripsi menjadi:")
+            print("     C = K · P mod 26")
+            print(f"     C = I · P mod 26  ← Karena K = I (Matriks Identitas)")
+            print("     C = P              ← Hasilnya: Ciphertext = Plaintext!")
+            print("   Artinya: Teks Anda TIDAK DIENKRIPSI sama sekali — teks asli langsung terlihat.")
+            print("   Kunci ini TIDAK AMAN dan tidak boleh digunakan dalam kriptografi.")
+            print("="*60)
+            print("💡 SARAN PERBAIKAN:")
+            print("   Pilih kunci yang elemennya tidak membentuk matriks identitas.")
+            print("   Contoh kunci yang aman dan valid:")
+            print("   • 2x2 : 3 3 2 5     (det mod 26 = 9)")
+            print("   • 3x3 : 1 0 2 4 4 3 5 7 6  (det mod 26 = 19)")
+            print("   • 4x4 : 1 2 1 0 0 1 2 1 1 0 1 2 2 1 0 1  (det mod 26 = 3)")
+            print("   Pastikan tidak ada baris/kolom yang saling merupakan kelipatan satu sama lain.")
+            print("-" * 60)
             print("Silakan input ulang kunci yang baru.\n" + "-" * 50)
             continue
             
